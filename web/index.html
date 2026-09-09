@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispatch</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #12151a; --line: #1e232b;
+    --text: #e6e9ef; --dim: #7d8695; --up: #3ddc91; --down: #ff6b6b;
+    --accent: #6ea8fe;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-size: 13px; }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 18px 24px; border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--down); display: inline-block; }
+  .dot.on { background: var(--up); }
+  .muted { color: var(--dim); }
+  main { display: grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap: 1px; background: var(--line); }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--bg); padding: 18px 24px; min-width: 0; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim);
+       margin: 0 0 12px; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 5px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  td.sym { color: var(--dim); }
+  td.px { text-align: right; }
+  td.age { text-align: right; color: var(--dim); width: 62px; font-size: 11px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .flash { animation: flash .45s ease-out; }
+  @keyframes flash { from { background: #ffffff14; } to { background: transparent; } }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0 0 20px; }
+  dt { color: var(--dim); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .big { font-size: 22px; }
+  .bar { height: 5px; background: var(--panel); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  footer { padding: 16px 24px; border-top: 1px solid var(--line); color: var(--dim);
+           line-height: 1.6; max-width: 70ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DISPATCH</h1>
+  <span><span class="dot" id="dot"></span> <span id="status" class="muted">connecting…</span></span>
+  <span class="muted" id="rate">—</span>
+</header>
+
+<main>
+  <section>
+    <h2>Live</h2>
+    <table><tbody id="rows"></tbody></table>
+  </section>
+
+  <section>
+    <h2>What it costs us</h2>
+    <dl>
+      <dt>p99, ingest to this page</dt><dd class="big" id="p99">—</dd>
+      <dt>p50</dt><dd id="p50">—</dd>
+      <dt>worst seen</dt><dd id="max">—</dd>
+    </dl>
+    <h2>Server</h2>
+    <dl>
+      <dt>subscribers</dt><dd id="subs">—</dd>
+      <dt>ticks in</dt><dd id="ticksin">—</dd>
+      <dt>coalesced away</dt><dd id="coalesced">—</dd>
+      <dt>frames out</dt><dd id="frames">—</dd>
+      <dt>encodes</dt><dd id="encodes">—</dd>
+      <dt>flush interval</dt><dd id="flush">—</dd>
+    </dl>
+    <h2>Coalescing</h2>
+    <div class="bar"><i id="coalbar" style="width:0%"></i></div>
+    <p class="muted" id="coaltext" style="margin:8px 0 0">—</p>
+  </section>
+</main>
+
+<footer>
+  The p99 above is measured in this browser: every frame carries the instant the
+  tick became ours, and the clock stops when this page has decoded it. It
+  includes the flush interval, which is a deliberate wait rather than a cost
+  we hid.
+  <br><br>
+  Coalesced ticks are prices a newer price replaced before either reached you.
+  That is the design: a queued tick is a price that was true a minute ago, and
+  showing it is worse than showing nothing.
+</footer>
+
+<script>
+const rows = document.getElementById("rows");
+const state = new Map();
+let received = 0, lastCount = 0, lastAt = Date.now();
+
+// Latency measured here, not reported by the server. A system marking its own
+// homework is the thing this project is trying not to be.
+const samples = [];
+function record(ms) {
+  samples.push(ms);
+  if (samples.length > 4000) samples.splice(0, samples.length - 4000);
+}
+function quantile(q) {
+  if (!samples.length) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => setStatus(true, "live");
+  ws.onclose = () => { setStatus(false, "reconnecting"); setTimeout(connect, 1000); };
+  ws.onmessage = (event) => {
+    const frame = JSON.parse(event.data);
+    if (frame.t === "status") { setStatus(frame.connected, frame.detail); return; }
+    if (frame.t !== "ticks" && frame.t !== "snapshot") return;
+    const now = Date.now();
+    for (const tick of frame.ticks) {
+      if (frame.t === "ticks") { record(now - tick.i); received++; }
+      apply(tick, now);
+    }
+    render();
+  };
+}
+
+function setStatus(on, detail) {
+  document.getElementById("dot").className = on ? "dot on" : "dot";
+  document.getElementById("status").textContent = detail;
+}
+
+function apply(tick, now) {
+  const previous = state.get(tick.s);
+  state.set(tick.s, {
+    price: tick.p,
+    direction: previous ? Math.sign(tick.p - previous.price) : 0,
+    at: now,
+  });
+}
+
+function render() {
+  const entries = [...state.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const now = Date.now();
+  for (const [symbol, row] of entries) {
+    let tr = document.getElementById(`r-${symbol}`);
+    if (!tr) {
+      tr = document.createElement("tr");
+      tr.id = `r-${symbol}`;
+      tr.innerHTML = `<td class="sym"></td><td class="px"></td><td class="age"></td>`;
+      rows.appendChild(tr);
+      tr.children[0].textContent = symbol;
+    }
+    const price = tr.children[1];
+    const next = row.price.toLocaleString("en-US", { maximumFractionDigits: 6 });
+    if (price.textContent !== next) {
+      price.textContent = next;
+      price.className = "px " + (row.direction > 0 ? "up" : row.direction < 0 ? "down" : "");
+      tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash");
+    }
+    tr.children[2].textContent = `${Math.round((now - row.at) / 100) / 10}s`;
+  }
+}
+
+function show(id, value) { document.getElementById(id).textContent = value; }
+
+setInterval(async () => {
+  const p99 = quantile(0.99), p50 = quantile(0.5);
+  show("p99", p99 === null ? "—" : `${p99} ms`);
+  show("p50", p50 === null ? "—" : `${p50} ms`);
+  show("max", samples.length ? `${Math.max(...samples)} ms` : "—");
+
+  const elapsed = (Date.now() - lastAt) / 1000;
+  show("rate", `${Math.round((received - lastCount) / elapsed)} ticks/s to this page`);
+  lastCount = received; lastAt = Date.now();
+
+  try {
+    const stats = await (await fetch("/stats")).json();
+    show("subs", stats.subscribers.toLocaleString());
+    show("ticksin", stats.ticks_in.toLocaleString());
+    show("coalesced", stats.coalesced.toLocaleString());
+    show("frames", stats.frames_out.toLocaleString());
+    show("encodes", stats.encodes.toLocaleString());
+    show("flush", `${stats.flush_ms} ms`);
+    const share = stats.ticks_in ? stats.coalesced / stats.ticks_in : 0;
+    document.getElementById("coalbar").style.width = `${(share * 100).toFixed(1)}%`;
+    document.getElementById("coaltext").textContent =
+      `${(share * 100).toFixed(1)}% of ticks were replaced by a newer price before anyone saw them.`;
+  } catch { /* the page keeps working without the stats panel */ }
+}, 1000);
+
+connect();
+render();
+</script>
+</body>
+</html>
