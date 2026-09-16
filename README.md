@@ -3,9 +3,14 @@
 Live market data to many browsers at once, in Go, with an honest number for
 how long it takes.
 
-```
+Built by [Vantion Labs](https://vantion.co). Not every problem is an LLM
+problem: before a CTO believes the interesting half, the boring half has to
+hold up, and this is the boring half measured properly.
+
+```bash
 go run ./cmd/dispatch                       # :8080, dashboard at /
 go run ./cmd/loadgen -clients 1000          # the benchmark
+go test ./...                               # the hub and the histogram
 ```
 
 ## The number

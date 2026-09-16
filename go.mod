@@ -1,4 +1,4 @@
-module github.com/stacklane/dispatch
+module github.com/vantionlabs/dispatch
 
 go 1.25
 

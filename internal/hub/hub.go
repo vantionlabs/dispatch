@@ -43,8 +43,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stacklane/dispatch/internal/feed"
-	"github.com/stacklane/dispatch/internal/metrics"
+	"github.com/vantionlabs/dispatch/internal/feed"
+	"github.com/vantionlabs/dispatch/internal/metrics"
 )
 
 // Sink is one connected client. Write must not block indefinitely; returning

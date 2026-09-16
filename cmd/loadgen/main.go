@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/stacklane/dispatch/internal/metrics"
+	"github.com/vantionlabs/dispatch/internal/metrics"
 )
 
 type frame struct {

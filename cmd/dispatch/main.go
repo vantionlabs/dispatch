@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/stacklane/dispatch/internal/feed"
-	"github.com/stacklane/dispatch/internal/hub"
+	"github.com/vantionlabs/dispatch/internal/feed"
+	"github.com/vantionlabs/dispatch/internal/hub"
 )
 
 func main() {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stacklane/dispatch/internal/feed"
+	"github.com/vantionlabs/dispatch/internal/feed"
 )
 
 type recorder struct {
