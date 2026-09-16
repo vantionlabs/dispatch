@@ -14,6 +14,9 @@
 <p align="center">
   <a href="https://github.com/vantionlabs/dispatch/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/vantionlabs/dispatch/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://go.dev"><img alt="Go 1.25" src="https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white" /></a>
+  <img alt="p99 40 ms at 1,000 subscribers" src="https://img.shields.io/badge/p99-40_ms_at_1k_subscribers-2233f0?style=flat-square" />
+  <img alt="websockets" src="https://img.shields.io/badge/transport-websockets-f4f4f6?style=flat-square" />
+  <a href="https://www.binance.com"><img alt="Binance feed" src="https://img.shields.io/badge/feed-Binance_live-F0B90B?style=flat-square&logo=binance&logoColor=white" /></a>
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-f4f4f6?style=flat-square" /></a>
   <a href="https://vantion.co"><img alt="Vantion Labs" src="https://img.shields.io/badge/by-Vantion_Labs-2233f0?style=flat-square" /></a>
 </p>
