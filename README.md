@@ -1,16 +1,33 @@
-# Dispatch
+<p align="center">
+  <a href="https://vantion.co">
+    <img src="https://raw.githubusercontent.com/vantionlabs/.github/main/profile/banner.png" alt="Vantion Labs" width="100%" />
+  </a>
+</p>
 
-Live market data to many browsers at once, in Go, with an honest number for
-how long it takes.
+<h1 align="center">Dispatch</h1>
 
-Built by [Vantion Labs](https://vantion.co). Not every problem is an LLM
-problem: before a CTO believes the interesting half, the boring half has to
-hold up, and this is the boring half measured properly.
+<p align="center">
+  <b>Live market data to thousands of browsers at once, in Go.</b><br />
+  With a latency number that survives being asked how it was measured.
+</p>
+
+<p align="center">
+  <a href="https://github.com/vantionlabs/dispatch/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/vantionlabs/dispatch/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://go.dev"><img alt="Go 1.25" src="https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white" /></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/licence-MIT-f4f4f6?style=flat-square" /></a>
+  <a href="https://vantion.co"><img alt="Vantion Labs" src="https://img.shields.io/badge/by-Vantion_Labs-2233f0?style=flat-square" /></a>
+</p>
+
+---
+
+A reference build from [Vantion Labs](https://vantion.co). Not every problem is
+an LLM problem: before a CTO believes the interesting half, the boring half has
+to hold up. This is the boring half, measured properly.
 
 ```bash
 go run ./cmd/dispatch                       # :8080, dashboard at /
 go run ./cmd/loadgen -clients 1000          # the benchmark
-go test ./...                               # the hub and the histogram
+go test -race ./...                         # the hub and the histogram
 ```
 
 ## The number
@@ -32,52 +49,50 @@ cores, not the server: the tail tightens as the client count drops while
 throughput keeps climbing. Measuring across a real network is D4, and until
 that is done this is a fan-out number and is labelled as one.
 
-## Three clocks, never conflated
+## What you get
 
-Most published latency figures quietly include the public internet. Ours does
-not, because we did not build the public internet.
-
-| Number | From | To | Whose fault |
-|---|---|---|---|
-| **Ours** | tick accepted by ingest | decoded on the client | ours, all of it |
-| *of which transport* | hub flush | decoded on the client | socket and JSON only |
-| **End to end** | the exchange's own timestamp | decoded on the client | ours, plus two networks and a clock we did not set |
-
-End to end runs around 160–250 ms and is dominated by the hop from Binance.
-It is reported because hiding it would be dishonest, and captioned because
-quoting it as ours would be worse.
+- **Coalescing fan-out, not queuing.** A slow subscriber gets the latest price
+  per symbol and nothing else. Load turns into a lower update rate rather than
+  lag, and memory is bounded by the symbol count rather than the tick rate.
+- **Three clocks, never conflated.** Ours, the transport half of ours, and end
+  to end including two networks we do not own. Each is reported with what it
+  includes.
+- **A drop rate published beside the latency.** Ticks are dropped on purpose,
+  so the number is real instead of folded into an average.
+- **Sharded writes.** Every frame is encoded once and shared read-only, so
+  fan-out scales across workers instead of through one goroutine.
+- **Latency as a distribution.** A histogram with bucket upper bounds, never an
+  interpolated quantile, because the mean hides the incident.
+- **A feed interface with one real implementation.** Binance is the demo source
+  because it is free and genuinely fast, which makes the number earned rather
+  than simulated.
+- **A dashboard that measures in the browser**, because that is where the
+  viewer's latency actually is.
 
 ## Coalescing, not queuing
 
-The decision the system turns on. A slow subscriber does not get a backlog;
-they get the latest price per symbol and nothing else.
+The decision the system turns on.
 
 A queued tick is a price that was true thirty seconds ago. Putting it on a
 screen is worse than putting nothing there, because the viewer cannot tell it
-is stale and will act on it. So load turns into a lower update rate rather
-than lag, memory is bounded by the symbol count rather than the tick rate, and
-ticks are dropped **on purpose** — which makes the drop rate a real number
-that gets published beside the latency instead of folded into it.
+is stale and will act on it. So ticks are dropped **on purpose**, and the drop
+rate gets published beside the latency.
 
 Measured against the live feed: **578 ticks/second in, about 47 price updates
 per second out to each subscriber, 92% coalesced away.** Binance delivers
-trades in bursts — thirty for BTC arrive together, then a quiet window — so
-the browser gets one current price per burst instead of thirty stale ones.
+trades in bursts, so the browser gets one current price per burst instead of
+thirty stale ones.
 
 ## Two things the benchmark found
 
-**The fan-out loop was serial.** Writing to every subscriber from one
-goroutine meant 80,000 syscalls a second through a single thread at 2,000
-connections, and the last subscriber received its frame 25 ms after the first.
-Sharding the writes across workers took throughput from 36k to 290k
-tick-deliveries per second. That is only safe because every frame is encoded
-once and shared read-only, which is the second thing the shared-buffer design
-bought.
+**The fan-out loop was serial.** Writing to every subscriber from one goroutine
+meant 80,000 syscalls a second through a single thread at 2,000 connections,
+and the last subscriber received its frame 25 ms after the first. Sharding the
+writes took throughput from 36k to 290k tick-deliveries per second.
 
 **A p99 above the maximum.** The first run reported an end-to-end p99 of 200 ms
 and a max of 167 ms, which is impossible. The histogram reports bucket upper
-bounds rather than interpolating — deliberately, because interpolating invents
-precision the histogram never had — and the bounds jumped 100 ms to 200 ms, so
+bounds rather than interpolating, and the bounds jumped 100 ms to 200 ms, so
 everything landed on one edge. Fixed with finer buckets and by clamping a
 quantile to the largest value actually observed.
 
@@ -92,16 +107,20 @@ internal/metrics latency as a distribution, because the mean hides the incident
 web/             the dashboard, which measures latency in the browser itself
 ```
 
-The feed is an interface. Binance is the demo source because it is free and
-genuinely fast, which makes the number earned rather than simulated; energy
-prices, transit positions and odds are the same system with a slower clock and
-a different adapter.
+The feed is an interface. Energy prices, transit positions and odds are the
+same system with a slower clock and a different adapter.
 
 ## What would make this dishonest
 
-Kept in `dispatch-spec.md` §5 so it stays checkable. Three of the four are
-guarded in code — every benchmark client fully decodes every frame, the report
-is a tail rather than a mean, and coalesced ticks are counted and printed
-beside the latency. The fourth is the same-machine caveat above, and it is
-stated everywhere the number appears rather than left for the reader to
-notice.
+Kept in [`dispatch-spec.md`](dispatch-spec.md) §5 so it stays checkable. Three
+of the four are guarded in code: every benchmark client fully decodes every
+frame, the report is a tail rather than a mean, and coalesced ticks are counted
+and printed beside the latency. The fourth is the same-machine caveat above,
+and it is stated everywhere the number appears rather than left for the reader
+to notice.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Built by [Vantion Labs](https://vantion.co); if
+you want help putting something like this into production,
+[talk to the founder](https://vantion.co/book-a-call).
